@@ -26,6 +26,8 @@ char *infile_path, *outfile_path;
 
 int running = 1;
 
+int in_process = 0;
+
 void remIndex(char *word, int idxToDel)
 {
     memmove(&word[idxToDel], &word[idxToDel + 1], strlen(word) - idxToDel);
@@ -309,6 +311,7 @@ int checkPipe(char *command)
 void signalHandler(int signo)
 {
     write(1, "\n", 1);
+    if (in_process == 0)
     printf("%s>", dir);
     fflush(stdout);
 }
@@ -352,6 +355,8 @@ int main(void)
     while (running)
     {
 
+        in_process = 0;
+
         getcwd(dir, MAX_LINE);
 
         out_restore = dup(STDOUT_FILENO);
@@ -362,6 +367,7 @@ int main(void)
         background = 0;
 
         command = readline(" ");
+        in_process = 1;
         if (!command[0]) {
             free(command);
             continue;
