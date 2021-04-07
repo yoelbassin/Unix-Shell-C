@@ -243,16 +243,6 @@ void pipes(char *command)
     int n = parsePipe(command, args);
 
 
-    for (int j = 0; j < n; j++)
-    {
-        printf("{");
-        for (int k = 0; k < 3; k++)
-        {
-            printf("%s, ", args[j][k]);
-        }
-        printf("}\n");
-    }
-    
     int i;
     pid_t pid;
     int in, fd[2];
@@ -289,6 +279,10 @@ int checkPipe(char *command)
     if (strchr(command, '|') != NULL)
         return 1;
     return 0;
+}
+
+void runCommand() {
+    
 }
 
 int main(void)
