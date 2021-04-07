@@ -8,6 +8,8 @@
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
@@ -40,8 +42,6 @@ int parseCommand(char *command, char **args)
         background = 1;
         command[strlen(command) - 2] = 0;
     }
-
-    command[strlen(command) - 1] = 0;
 
     char *token = strtok(command, " ");
     out_file = 0, in_file = 0;
@@ -308,9 +308,9 @@ int checkPipe(char *command)
 
 void signalHandler(int signo)
 {
-write(1, "\n", 1);
-        printf("%s>", dir);
-        fflush(stdout);
+    write(1, "\n", 1);
+    printf("%s>", dir);
+    fflush(stdout);
 }
 
 int main(void)
@@ -339,8 +339,10 @@ int main(void)
 
     int background = 0;
 
-    int fd[2];
+    rl_bind_key('\t', rl_complete);
 
+    int fd[2];
+    char *command;
     if (pipe(fd) == -1)
     {
         fprintf(stderr, "Pipe Failed");
@@ -359,17 +361,19 @@ int main(void)
         fflush(stdout);
         background = 0;
 
-        char command[MAX_LINE + 1];
-        fgets(command, MAX_LINE + 1, stdin);
-
-        if (!strcmp(command, "e\n") || strlen(command) <= 0)
+        command = readline(" ");
+        if (!command[0]) {
+            free(command);
+            continue;
+        }
+        if (!strcmp(command, "\n"))
         {
-            running = 0;
             continue;
         }
 
-        if (!strcmp(command, "\n"))
+        if (!strcmp(command, "exit") || !strcmp(command, "quit"))
         {
+            running = 0;
             continue;
         }
 
