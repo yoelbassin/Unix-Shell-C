@@ -19,6 +19,10 @@ int pipe_flag = 0;
 
 char *infile_path, *outfile_path;
 
+void remIndex(char *word, int idxToDel){
+    memmove(&word[idxToDel], &word[idxToDel + 1], strlen(word) - idxToDel);
+}
+
 int parseCommand(char *command, char **args)
 {
     int background = 0;
@@ -47,19 +51,20 @@ int parseCommand(char *command, char **args)
 
         if (string_flag == 1)
         {
-
             if (token[0] == '\'')
             {
                 string_flag = 1;
                 args[i] = token;
+                remIndex(args[i], 0);
             }
             else
             {
-                strcat(args[i], " ");
-                strcat(args[i], token);
+                strncat(args[i], " ", 2);
+                strncat(args[i], token, strlen(token));
             }
-            if (token[strlen(token) - 2] == '\'')
+            if (token[strlen(token) - 1] == '\'')
             {
+                remIndex(args[i], strlen(args[i])-1);
                 string_flag = 0;
                 i++;
             }
@@ -263,12 +268,10 @@ void pipes(char *command)
     /* The first process should get its input from the original file descriptor 0.  */
     in = 0;
 
-
     /* Note the loop bound, we spawn here all, but the last stage of the pipeline.  */
     for (i = 0; i < n - 1; ++i)
     {
         parseCommand(commands[i], args);
-
 
         pipe(fd);
 
@@ -311,13 +314,13 @@ int main(void)
 
     int pid0 = fork();
 
-    if (pid0 == 0){
+    if (pid0 == 0)
+    {
         char *clear[] = {"clear", NULL};
         execc(clear);
     }
 
     wait(NULL);
-
 
     char *args[MAX_LINE / 2 + 1];
 
