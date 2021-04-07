@@ -183,7 +183,7 @@ void useHistory(char **args, int command_count)
         while ((getline(&line, &len, file)) != -1)
         {
             if (j >= command_count - n)
-                printf("%s", line);
+                printf("%d %s", j, line);
             j++;
         }
         printf("\n");
