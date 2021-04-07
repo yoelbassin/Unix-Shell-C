@@ -45,6 +45,9 @@ int parseCommand(char *command, char **args)
         command[strlen(command) - 2] = 0;
     }
 
+    if (command[strlen(command) - 1] == '\n')
+        command[strlen(command) - 1] = 0;
+
     char *token = strtok(command, " ");
     out_file = 0, in_file = 0;
     int i = 0;
@@ -312,7 +315,7 @@ void signalHandler(int signo)
 {
     write(1, "\n", 1);
     if (in_process == 0)
-    printf("%s>", dir);
+        printf("%s>", dir);
     fflush(stdout);
 }
 
@@ -368,7 +371,8 @@ int main(void)
 
         command = readline(" ");
         in_process = 1;
-        if (!command[0]) {
+        if (!command[0])
+        {
             free(command);
             continue;
         }
