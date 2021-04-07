@@ -22,6 +22,9 @@ char *infile_path, *outfile_path;
 int parseCommand(char *command, char **args)
 {
     int background = 0;
+
+    int string_flag = 0;
+
     if (command[strlen(command) - 2] == '&')
     {
         background = 1;
@@ -37,6 +40,33 @@ int parseCommand(char *command, char **args)
 
     while (token != NULL)
     {
+        if (token[0] == '\'')
+        {
+            string_flag = 1;
+        }
+
+        if (string_flag == 1)
+        {
+
+            if (token[0] == '\'')
+            {
+                string_flag = 1;
+                args[i] = token;
+            }
+            else
+            {
+                strcat(args[i], " ");
+                strcat(args[i], token);
+            }
+            if (token[strlen(token) - 2] == '\'')
+            {
+                string_flag = 0;
+                i++;
+            }
+            token = strtok(NULL, " ");
+            continue;
+        }
+
         if (!strcmp(token, "<"))
         {
             in_file = 1;
@@ -73,35 +103,18 @@ int parseCommand(char *command, char **args)
     return background;
 }
 
-int parsePipe(char *command, char **args[])
+int parsePipe(char *command, char *args[])
 {
-    printf("\n%s\n", command);
-    char *args1[MAX_LINE];
-    char *args2[MAX_LINE];
     command[strlen(command) - 1] = 0;
     char *token = strtok(command, "|");
     int i = 0;
     while (token != NULL)
     {
-        args1[i] = token;
+        args[i] = token;
         token = strtok(NULL, "|");
         i++;
     }
 
-    for (int j = 0; j < i; ++j)
-    {
-        parseCommand(args1[j], args2);
-        int k = 0;
-        args[j] = malloc(sizeof(args2));
-        while (args2[k] != NULL)
-        {
-
-            args[j][k] = strdup(args2[k]);
-            k++;
-        }
-
-        memset(args2, 0, MAX_LINE);
-    }
     return i;
 }
 
@@ -239,9 +252,9 @@ void pipes(char *command)
 {
     strcat(command, "\n");
     pipe_flag = 1;
-    char **args[MAX_LINE];
-    int n = parsePipe(command, args);
-
+    char *commands[MAX_LINE];
+    char *args[MAX_LINE];
+    int n = parsePipe(command, commands);
 
     int i;
     pid_t pid;
@@ -250,20 +263,28 @@ void pipes(char *command)
     /* The first process should get its input from the original file descriptor 0.  */
     in = 0;
 
+
     /* Note the loop bound, we spawn here all, but the last stage of the pipeline.  */
     for (i = 0; i < n - 1; ++i)
     {
+        parseCommand(commands[i], args);
+
+
         pipe(fd);
 
         /* f [1] is the write end of the pipe, we carry `in` from the prev iteration.  */
-        spawn_proc(in, fd[1], args[i]);
+        spawn_proc(in, fd[1], args);
 
         /* No need for the write end of the pipe, the child will write here.  */
         close(fd[1]);
 
         /* Keep the read end of the pipe, the next child will read from there.  */
         in = fd[0];
+
+        memset(args, 0, MAX_LINE);
     }
+
+    parseCommand(commands[i], args);
 
     /* Last stage of the pipeline - set stdin be the read end of the previous pipe
      and output to the original file descriptor 1. */
@@ -271,7 +292,7 @@ void pipes(char *command)
         dup2(in, 0);
 
     /* Execute the last stage with the current process. */
-    execc(args[i]);
+    execc(args);
 }
 
 int checkPipe(char *command)
@@ -281,12 +302,23 @@ int checkPipe(char *command)
     return 0;
 }
 
-void runCommand() {
-    
+void runCommand()
+{
 }
 
 int main(void)
 {
+
+    int pid0 = fork();
+
+    if (pid0 == 0){
+        char *clear[] = {"clear", NULL};
+        execc(clear);
+    }
+
+    wait(NULL);
+
+
     char *args[MAX_LINE / 2 + 1];
 
     out_file = 0, in_file = 0;
