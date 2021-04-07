@@ -11,22 +11,13 @@
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
 
-int out_file, in_file = 0;
+int out_file = 0, in_file = 0;
 
 int in_restore, out_restore;
 
+int pipe_flag = 0;
+
 char *infile_path, *outfile_path;
-
-void stringRemove(char *word, int idxToDel)
-{
-    memmove(&word[idxToDel], &word[idxToDel + 1], strlen(word) - idxToDel);
-}
-
-void tstring(char *word, int idxToDel)
-{
-    for (int i = 0; i < idxToDel; ++i)
-        stringRemove(word, 0);
-}
 
 int parseCommand(char *command, char **args)
 {
@@ -40,9 +31,10 @@ int parseCommand(char *command, char **args)
     command[strlen(command) - 1] = 0;
 
     char *token = strtok(command, " ");
-    out_file, in_file = 0;
+    out_file = 0, in_file = 0;
     int i = 0;
-    int infile_index, outfile_index = -1;
+    int infile_index = -1, outfile_index = -1;
+
     while (token != NULL)
     {
         if (!strcmp(token, "<"))
@@ -61,7 +53,6 @@ int parseCommand(char *command, char **args)
         }
 
         args[i] = token;
-        printf("\n%s\n", token);
         token = strtok(NULL, " ");
         i++;
     }
@@ -74,12 +65,15 @@ int parseCommand(char *command, char **args)
     {
         outfile_path = args[outfile_index];
     }
-    args[i] = NULL;
-    printf("\n%s\n", args[i]);
-    return background;
-} 
 
-int parsePipe(char *command, char ***args)
+    if (pipe_flag == 0)
+    {
+        args[i] = NULL;
+    }
+    return background;
+}
+
+int parsePipe(char *command, char **args[])
 {
     printf("\n%s\n", command);
     char *args1[MAX_LINE];
@@ -90,16 +84,23 @@ int parsePipe(char *command, char ***args)
     while (token != NULL)
     {
         args1[i] = token;
-                printf("\n%s\n", token);
         token = strtok(NULL, "|");
         i++;
     }
 
     for (int j = 0; j < i; ++j)
-    {    printf("\nPipeline1\n");
+    {
         parseCommand(args1[j], args2);
-         printf("\nPipeline1\n");
-        args[j] = memcpy(args[j], args2, MAX_LINE);
+        int k = 0;
+        args[j] = malloc(sizeof(args2));
+        while (args2[k] != NULL)
+        {
+
+            args[j][k] = strdup(args2[k]);
+            k++;
+        }
+
+        memset(args2, 0, MAX_LINE);
     }
     return i;
 }
@@ -120,6 +121,7 @@ void saveCommand(char **args)
 
 void execc(char **args)
 {
+    //printf("\nExecuting %s\n", args[0]);
     execvp(args[0], args);
     printf("[!] command \'%s\' not found\n", args[0]);
     exit(0);
@@ -211,48 +213,74 @@ void redirection()
     }
 }
 
+void spawn_proc(int in, int out, char **args)
+{
+    pid_t pid;
+
+    if ((pid = fork()) == 0)
+    {
+        if (in != 0)
+        {
+            dup2(in, 0);
+            close(in);
+        }
+
+        if (out != 1)
+        {
+            dup2(out, 1);
+            close(out);
+        }
+
+        execc(args);
+    }
+}
+
 void pipes(char *command)
 {
-
-    printf("\nPipeline\n");
+    strcat(command, "\n");
+    pipe_flag = 1;
     char **args[MAX_LINE];
     int n = parsePipe(command, args);
-    printf("\nPipeline\n");
+
+
+    for (int j = 0; j < n; j++)
+    {
+        printf("{");
+        for (int k = 0; k < 3; k++)
+        {
+            printf("%s, ", args[j][k]);
+        }
+        printf("}\n");
+    }
+    
     int i;
     pid_t pid;
-    int input, fd[2];
-    input = 0;
+    int in, fd[2];
 
+    /* The first process should get its input from the original file descriptor 0.  */
+    in = 0;
+
+    /* Note the loop bound, we spawn here all, but the last stage of the pipeline.  */
     for (i = 0; i < n - 1; ++i)
     {
-        printf("\nPipeline 2\n");
         pipe(fd);
-        pid_t pid1;
 
-        pid = fork();
+        /* f [1] is the write end of the pipe, we carry `in` from the prev iteration.  */
+        spawn_proc(in, fd[1], args[i]);
 
-        int output = fd[1];
-        if (pid == 0)
-        {
-            if (input != 0)
-            {
-                dup2(input, STDIN_FILENO);
-                close(input);
-            }
-            if (output != 0)
-            {
-                dup2(output, STDOUT_FILENO);
-                close(output);
-            }
-            execc(args[i]);
-        }
+        /* No need for the write end of the pipe, the child will write here.  */
         close(fd[1]);
-        input = fd[0];
+
+        /* Keep the read end of the pipe, the next child will read from there.  */
+        in = fd[0];
     }
-    if (input != 0)
-    {
-        dup2(input, 0);
-    }
+
+    /* Last stage of the pipeline - set stdin be the read end of the previous pipe
+     and output to the original file descriptor 1. */
+    if (in != 0)
+        dup2(in, 0);
+
+    /* Execute the last stage with the current process. */
     execc(args[i]);
 }
 
@@ -267,7 +295,7 @@ int main(void)
 {
     char *args[MAX_LINE / 2 + 1];
 
-    out_file, in_file = 0;
+    out_file = 0, in_file = 0;
 
     int running = 1;
 
@@ -285,6 +313,10 @@ int main(void)
 
     while (running)
     {
+
+        out_restore = dup(STDOUT_FILENO);
+        in_restore = dup(STDIN_FILENO);
+
         printf("osh> ");
         fflush(stdout);
         background = 0;
@@ -311,6 +343,7 @@ int main(void)
             else
             {
                 wait(NULL);
+                pipe_flag = 0;
                 continue;
             }
         }
