@@ -7,9 +7,12 @@
 #include <ctype.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
+
+char dir[MAX_LINE];
 
 int out_file = 0, in_file = 0;
 
@@ -19,7 +22,10 @@ int pipe_flag = 0;
 
 char *infile_path, *outfile_path;
 
-void remIndex(char *word, int idxToDel){
+int running = 1;
+
+void remIndex(char *word, int idxToDel)
+{
     memmove(&word[idxToDel], &word[idxToDel + 1], strlen(word) - idxToDel);
 }
 
@@ -44,6 +50,7 @@ int parseCommand(char *command, char **args)
 
     while (token != NULL)
     {
+
         if (token[0] == '\'')
         {
             string_flag = 1;
@@ -64,7 +71,7 @@ int parseCommand(char *command, char **args)
             }
             if (token[strlen(token) - 1] == '\'')
             {
-                remIndex(args[i], strlen(args[i])-1);
+                remIndex(args[i], strlen(args[i]) - 1);
                 string_flag = 0;
                 i++;
             }
@@ -156,7 +163,7 @@ void useHistory(char **args, int command_count)
     }
 
     char *line = NULL;
-    int n = 10;
+    int n = command_count;
     size_t len = 0;
 
     if (args[1] != NULL)
@@ -164,7 +171,7 @@ void useHistory(char **args, int command_count)
     if (!strcmp(args[0], "!!"))
         n = command_count - 1;
 
-    if (!strcmp(args[0], "hist"))
+    if (!strcmp(args[0], "history"))
     {
         int j = 0;
         printf("command count: %d\n", command_count);
@@ -231,28 +238,6 @@ void redirection()
     }
 }
 
-void spawn_proc(int in, int out, char **args)
-{
-    pid_t pid;
-
-    if ((pid = fork()) == 0)
-    {
-        if (in != 0)
-        {
-            dup2(in, 0);
-            close(in);
-        }
-
-        if (out != 1)
-        {
-            dup2(out, 1);
-            close(out);
-        }
-
-        execc(args);
-    }
-}
-
 void pipes(char *command)
 {
     strcat(command, "\n");
@@ -263,10 +248,7 @@ void pipes(char *command)
 
     int i;
     pid_t pid;
-    int in, fd[2];
-
-    /* The first process should get its input from the original file descriptor 0.  */
-    in = 0;
+    int in = 0, fd[2];
 
     /* Note the loop bound, we spawn here all, but the last stage of the pipeline.  */
     for (i = 0; i < n - 1; ++i)
@@ -276,7 +258,26 @@ void pipes(char *command)
         pipe(fd);
 
         /* f [1] is the write end of the pipe, we carry `in` from the prev iteration.  */
-        spawn_proc(in, fd[1], args);
+        pid_t pid;
+
+        int out = fd[1];
+
+        if ((pid = fork()) == 0)
+        {
+            if (in != 0)
+            {
+                dup2(in, 0);
+                close(in);
+            }
+
+            if (out != 1)
+            {
+                dup2(out, 1);
+                close(out);
+            }
+
+            execc(args);
+        }
 
         /* No need for the write end of the pipe, the child will write here.  */
         close(fd[1]);
@@ -305,8 +306,11 @@ int checkPipe(char *command)
     return 0;
 }
 
-void runCommand()
+void signalHandler(int signo)
 {
+write(1, "\n", 1);
+        printf("%s>", dir);
+        fflush(stdout);
 }
 
 int main(void)
@@ -322,11 +326,14 @@ int main(void)
 
     wait(NULL);
 
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+    signal(SIGQUIT, signalHandler);
+    signal(SIGTSTP, signalHandler);
+
     char *args[MAX_LINE / 2 + 1];
 
     out_file = 0, in_file = 0;
-
-    int running = 1;
 
     int command_count = 0;
 
@@ -343,10 +350,12 @@ int main(void)
     while (running)
     {
 
+        getcwd(dir, MAX_LINE);
+
         out_restore = dup(STDOUT_FILENO);
         in_restore = dup(STDIN_FILENO);
 
-        printf("osh> ");
+        printf("%s>", dir);
         fflush(stdout);
         background = 0;
 
@@ -378,6 +387,12 @@ int main(void)
         }
         background = parseCommand(command, args);
 
+        if (!strcmp(args[0], "cd"))
+        {
+            chdir(args[1]);
+            continue;
+        }
+
         if (out_file == 1 || in_file == 1)
         {
             redirection();
@@ -393,7 +408,11 @@ int main(void)
 
         if (pid == 0)
         {
-            if (!strcmp(args[0], "!") || !strcmp(args[0], "hist") || !strcmp(args[0], "!!"))
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
+            signal(SIGQUIT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+            if (!strcmp(args[0], "!") || !strcmp(args[0], "history") || !strcmp(args[0], "!!"))
             {
                 pipeSend(command_count, args, fd);
                 useHistory(args, command_count);
