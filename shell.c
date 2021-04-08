@@ -14,6 +14,12 @@
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
 
+struct Arguments {
+    char *args[MAX_LINE];
+    int background;
+    int command_count;
+};
+
 char dir[MAX_LINE];
 
 int out_file = 0, in_file = 0;
@@ -64,7 +70,6 @@ int parseCommand(char *command, char **args)
         {
             string_flag_d = 1;
         }
-        
 
         if (string_flag_o == 1)
         {
@@ -163,16 +168,12 @@ int parsePipe(char *command, char *args[])
     return i;
 }
 
-void saveCommand(char **args)
+void saveCommand(char *command)
 {
 
     FILE *file = fopen(HISTORY_PATH, "a");
     int i = 0;
-    while (args[i] != NULL)
-    {
-        fprintf(file, "%s ", args[i]);
-        ++i;
-    }
+    fprintf(file, "%s ", command);
     fprintf(file, "\n");
     fclose(file);
 }
@@ -185,7 +186,9 @@ void execc(char **args)
     exit(0);
 }
 
-void useHistory(char **args, int command_count)
+int runCommand(char *command, struct Arguments *arguments);
+
+void useHistory(char **args, int command_count, struct Arguments *arguments)
 {
     FILE *file = fopen(HISTORY_PATH, "r");
 
@@ -202,7 +205,7 @@ void useHistory(char **args, int command_count)
     if (args[1] != NULL)
         n = atoi(args[1]);
     if (!strcmp(args[0], "!!"))
-        n = command_count - 1;
+        n = command_count - 2;
 
     if (!strcmp(args[0], "history"))
     {
@@ -228,9 +231,8 @@ void useHistory(char **args, int command_count)
                 exit(0);
             }
         }
-        printf("Command number %d: %s", n, line);
-        parseCommand(line, args);
-        execc(args);
+        printf("%s", line);
+        runCommand(line, arguments);
         exit(0);
     }
 }
@@ -347,6 +349,64 @@ void signalHandler(int signo)
     fflush(stdout);
 }
 
+int runCommand(char *command, struct Arguments *arguments)
+{
+    if (checkPipe(command))
+    {
+        int pid_ = fork();
+        if (pid_ == 0)
+            pipes(command);
+        else
+        {
+            wait(NULL);
+            pipe_flag = 0;
+            return 0;
+        }
+    }
+    arguments->background = parseCommand(command, arguments->args);
+
+    if (!strcmp(arguments->args[0], "cd"))
+    {
+        chdir(arguments->args[1]);
+        return 0;
+    }
+
+    if (out_file == 1 || in_file == 1)
+    {
+        redirection();
+    }
+
+    int pid = fork();
+
+    if (pid < 0)
+    {
+        perror("Fork Failed");
+        return 1;
+    }
+
+    if (pid == 0)
+    {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTERM, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        if (!strcmp(arguments->args[0], "!") || !strcmp(arguments->args[0], "history") || !strcmp(arguments->args[0], "!!"))
+        {
+            useHistory(arguments->args, arguments->command_count, arguments);
+        }
+        execc(arguments->args);
+    }
+
+    else
+    {
+        if (!arguments->background)
+            wait(NULL);
+    }
+    dup2(in_restore, STDIN_FILENO);
+    dup2(out_restore, STDOUT_FILENO);
+    return 0;
+}
+
 int main(void)
 {
 
@@ -365,13 +425,13 @@ int main(void)
     signal(SIGQUIT, signalHandler);
     signal(SIGTSTP, signalHandler);
 
-    char *args[MAX_LINE / 2 + 1];
+    struct Arguments arguments;
 
     out_file = 0, in_file = 0;
 
-    int command_count = 0;
+    arguments.command_count = 0;
 
-    int background = 0;
+    arguments.background = 0;
 
     rl_bind_key('\t', rl_complete);
 
@@ -395,7 +455,7 @@ int main(void)
 
         printf("%s>", dir);
         fflush(stdout);
-        background = 0;
+        arguments.background = 0;
 
         command = readline(" ");
         in_process = 1;
@@ -415,67 +475,10 @@ int main(void)
             continue;
         }
 
-        if (checkPipe(command))
-        {
-            int pid_ = fork();
-            if (pid_ == 0)
-                pipes(command);
-            else
-            {
-                wait(NULL);
-                pipe_flag = 0;
-                continue;
-            }
-        }
-        background = parseCommand(command, args);
+        saveCommand(command);
+        arguments.command_count ++;
+        runCommand(command, &arguments);
 
-        if (!strcmp(args[0], "cd"))
-        {
-            chdir(args[1]);
-            continue;
-        }
-
-        if (out_file == 1 || in_file == 1)
-        {
-            redirection();
-        }
-
-        int pid = fork();
-
-        if (pid < 0)
-        {
-            perror("Fork Failed");
-            return 1;
-        }
-
-        if (pid == 0)
-        {
-            signal(SIGINT, SIG_DFL);
-            signal(SIGTERM, SIG_DFL);
-            signal(SIGQUIT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
-            if (!strcmp(args[0], "!") || !strcmp(args[0], "history") || !strcmp(args[0], "!!"))
-            {
-                pipeSend(command_count, args, fd);
-                useHistory(args, command_count);
-            }
-            command_count++;
-            pipeSend(command_count, args, fd);
-            saveCommand(args);
-            execc(args);
-        }
-
-        else
-        {
-            char input_str[100];
-            read(fd[0], input_str, 100);
-
-            command_count = atoi(input_str);
-            if (!background)
-                wait(NULL);
-        }
-        dup2(in_restore, STDIN_FILENO);
-        dup2(out_restore, STDOUT_FILENO);
     }
     remove(HISTORY_PATH);
     close(fd[1]);
