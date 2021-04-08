@@ -14,7 +14,8 @@
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
 
-struct Arguments {
+struct Arguments
+{
     char *args[MAX_LINE];
     int background;
     int command_count;
@@ -205,7 +206,7 @@ void useHistory(char **args, int command_count, struct Arguments *arguments)
     if (args[1] != NULL)
         n = atoi(args[1]);
     if (!strcmp(args[0], "!!"))
-        n = command_count - 2;
+        n = command_count - 1;
 
     if (!strcmp(args[0], "history"))
     {
@@ -475,10 +476,16 @@ int main(void)
             continue;
         }
 
-        saveCommand(command);
-        arguments.command_count ++;
+        char *temp = malloc(sizeof(command));
+        strcpy(temp, command);
+        char *token = strtok(temp, " ");
+        if ((token != NULL) && (strcmp(token, "!")) && (strcmp(token, "!!")))
+        {
+            saveCommand(command);
+            arguments.command_count++;
+        }
+        free(temp);
         runCommand(command, &arguments);
-
     }
     remove(HISTORY_PATH);
     close(fd[1]);
