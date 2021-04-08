@@ -37,7 +37,7 @@ int parseCommand(char *command, char **args)
 {
     int background = 0;
 
-    int string_flag = 0;
+    int string_flag_o = 0, string_flag_d = 0;
 
     if (command[strlen(command) - 2] == '&')
     {
@@ -58,14 +58,19 @@ int parseCommand(char *command, char **args)
 
         if (token[0] == '\'')
         {
-            string_flag = 1;
+            string_flag_o = 1;
         }
+        else if (token[0] == '\"')
+        {
+            string_flag_d = 1;
+        }
+        
 
-        if (string_flag == 1)
+        if (string_flag_o == 1)
         {
             if (token[0] == '\'')
             {
-                string_flag = 1;
+                string_flag_o = 1;
                 args[i] = token;
                 remIndex(args[i], 0);
             }
@@ -77,7 +82,30 @@ int parseCommand(char *command, char **args)
             if (token[strlen(token) - 1] == '\'')
             {
                 remIndex(args[i], strlen(args[i]) - 1);
-                string_flag = 0;
+                string_flag_o = 0;
+                i++;
+            }
+            token = strtok(NULL, " ");
+            continue;
+        }
+
+        if (string_flag_d == 1)
+        {
+            if (token[0] == '\"')
+            {
+                string_flag_d = 1;
+                args[i] = token;
+                remIndex(args[i], 0);
+            }
+            else
+            {
+                strncat(args[i], " ", 2);
+                strncat(args[i], token, strlen(token));
+            }
+            if (token[strlen(token) - 1] == '\"')
+            {
+                remIndex(args[i], strlen(args[i]) - 1);
+                string_flag_d = 0;
                 i++;
             }
             token = strtok(NULL, " ");
