@@ -355,7 +355,7 @@ void signalHandler(int signo)
 {
     write(1, "\n", 1);
     if (in_process == 0)
-        printf(ANSI_COLOR_MAGENTA "%s>" ANSI_COLOR_RESET, dir);
+                printf(ANSI_COLOR_GREEN "Shell:" ANSI_COLOR_CYAN "%s" ANSI_COLOR_MAGENTA ">" ANSI_COLOR_RESET, dir);
     fflush(stdout);
 }
 
@@ -447,8 +447,6 @@ int main(void)
 
     char *command;
 
-            getcwd(dir, MAX_LINE);
-
     hist_path = malloc(MAX_LINE);
     strcpy(hist_path, dir);
     strncat(hist_path, HISTORY_PATH, strlen(HISTORY_PATH) + 1);
@@ -463,7 +461,7 @@ int main(void)
         out_restore = dup(STDOUT_FILENO);
         in_restore = dup(STDIN_FILENO);
 
-        printf(ANSI_COLOR_GREEN "%s:" ANSI_COLOR_CYAN "%s" ANSI_COLOR_MAGENTA ">" ANSI_COLOR_RESET, getenv("USERNAME"), dir);
+        printf(ANSI_COLOR_GREEN "Shell:" ANSI_COLOR_CYAN "%s" ANSI_COLOR_MAGENTA ">" ANSI_COLOR_RESET, dir);
         fflush(stdout);
         arguments.background = 0;
 
