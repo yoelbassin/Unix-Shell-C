@@ -11,6 +11,14 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_RESET "\x1b[0m"
+
 #define MAX_LINE 1024
 #define HISTORY_PATH ".history"
 
@@ -34,6 +42,8 @@ char *infile_path, *outfile_path;
 int running = 1;
 
 int in_process = 0;
+
+char *hist_path;
 
 void remIndex(char *word, int idxToDel)
 {
@@ -171,8 +181,7 @@ int parsePipe(char *command, char *args[])
 
 void saveCommand(char *command)
 {
-
-    FILE *file = fopen(HISTORY_PATH, "a");
+    FILE *file = fopen(hist_path, "a");
     int i = 0;
     fprintf(file, "%s ", command);
     fprintf(file, "\n");
@@ -191,7 +200,7 @@ int runCommand(char *command, struct Arguments *arguments);
 
 void useHistory(char **args, int command_count, struct Arguments *arguments)
 {
-    FILE *file = fopen(HISTORY_PATH, "r");
+    FILE *file = fopen(hist_path, "r");
 
     if (file == NULL)
     {
@@ -346,7 +355,7 @@ void signalHandler(int signo)
 {
     write(1, "\n", 1);
     if (in_process == 0)
-        printf("%s>", dir);
+        printf(ANSI_COLOR_MAGENTA "%s>" ANSI_COLOR_RESET, dir);
     fflush(stdout);
 }
 
@@ -436,13 +445,13 @@ int main(void)
 
     rl_bind_key('\t', rl_complete);
 
-    int fd[2];
     char *command;
-    if (pipe(fd) == -1)
-    {
-        fprintf(stderr, "Pipe Failed");
-        return 1;
-    }
+
+            getcwd(dir, MAX_LINE);
+
+    hist_path = malloc(MAX_LINE);
+    strcpy(hist_path, dir);
+    strncat(hist_path, HISTORY_PATH, strlen(HISTORY_PATH) + 1);
 
     while (running)
     {
@@ -454,7 +463,7 @@ int main(void)
         out_restore = dup(STDOUT_FILENO);
         in_restore = dup(STDIN_FILENO);
 
-        printf("%s>", dir);
+        printf(ANSI_COLOR_GREEN "%s:" ANSI_COLOR_CYAN "%s" ANSI_COLOR_MAGENTA ">" ANSI_COLOR_RESET, getenv("USERNAME"), dir);
         fflush(stdout);
         arguments.background = 0;
 
@@ -476,7 +485,7 @@ int main(void)
             continue;
         }
 
-        char *temp = malloc(sizeof(command));
+        char *temp = malloc(sizeof(command) + 1);
         strcpy(temp, command);
         char *token = strtok(temp, " ");
         if ((token != NULL) && (strcmp(token, "!")) && (strcmp(token, "!!")))
@@ -487,9 +496,8 @@ int main(void)
         free(temp);
         runCommand(command, &arguments);
     }
-    remove(HISTORY_PATH);
-    close(fd[1]);
-    close(fd[0]);
+    remove(hist_path);
+    free(hist_path);
 
     return 0;
 }
